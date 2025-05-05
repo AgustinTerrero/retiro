@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Retiro de Alumnos</title>
+  <link rel="shortcut icon" href="./logo.png" type="image/x-icon">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>Sistema de Retiro de Alumnos</h1>
+      <div class="role-selector" style="display: none;">
+        <label for="rol-usuario">Acceder como:</label>
+        <select id="rol-usuario" onchange="cambiarModoAcceso()">
+          <option value="admin">Administrador</option>
+          <option value="padres" selected>Padres</option>
+          <option value="aula">Docente</option>
+        </select>
+      </div>
+    </header>
+
+    <!-- Modal de acceso admin -->
+    <div id="modal-login" class="modal">
+      <div class="modal-content">
+        <h3>Acceso Administrador</h3>
+    
+        <div class="login-field">
+          <label for="username">Usuario:</label>
+          <input type="text" id="username" placeholder="Ingrese su usuario" autofocus>
+        </div>
+    
+        <div class="login-field">
+          <label for="password">Contraseña:</label>
+          <input type="password" id="password" placeholder="Ingrese su contraseña">
+        </div>
+    
+        <div id="login-error" class="error-message" style="display: none;">Credenciales incorrectas</div>
+    
+        <div class="login-actions">
+          <button onclick="verificarCredenciales()">Iniciar Sesión</button>
+          <button onclick="cancelarLogin()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+    
+    
+
+    <nav class="tab-nav">
+      <button class="tab-button active" onclick="cambiarPestaña(0)">Padres</button>
+      <button class="tab-button" onclick="cambiarPestaña(1)">Gestión</button>
+      <button class="tab-button" onclick="cambiarPestaña(2)">Aula <span id="alert-badge" class="alert-badge">0</span></button>
+      <button class="tab-button" onclick="cambiarPestaña(3)">Historial</button>
+    </nav>
+
+    <main class="tab-container">
+      <!-- Pestaña Padres -->
+      <section class="tab-panel active">
+        <div class="form-grid">
+          <label>DNI del Apoderado:</label>
+          <input type="number" id="dni-ingresado" placeholder="Ingrese su DNI" oninput="buscarPadrePorDNI()">
+          
+          <div id="nombre-padre-mostrado" style="margin-top: 10px; font-weight: bold; color: #1a237e;"></div>
+
+          <label>Grado:</label>
+          <select id="retiro-grado" onchange="cargarAlumnos()">
+            <option value="">Seleccione</option>
+            <option value="1A">1° A</option>
+            <option value="1B">1° B</option>
+            <option value="2A">2° A</option>
+            <option value="2B">2° B</option>
+            <option value="3A">3° A</option>
+            <option value="3B">3° B</option>
+            <option value="4A">4° A</option>
+            <option value="4B">4° B</option>
+            <option value="5A">5° A</option>
+            <option value="5B">5° B</option>
+            <option value="6A">6° A</option>
+            <option value="6B">6° B</option>
+            <option value="7A">7° A</option>
+            <option value="7B">7° B</option>
+          </select>
+
+          <label>Alumno:</label>
+          <select id="retiro-alumno" disabled>
+            <option value="">Seleccione</option>
+          </select>
+
+          <div class="mochila-selector">
+            <button id="btn-con-mochila" type="button" onclick="seleccionarMochila(true)">🎒 Con Mochila</button>
+            <button id="btn-sin-mochila" type="button" onclick="seleccionarMochila(false)">🚫 Sin Mochila</button>
+          </div>
+          <input type="hidden" id="conMochila" value="">
+          
+
+          <button id="boton-enviar" onclick="enviarNotificacion()">Enviar Solicitud</button>
+        </div>
+      </section>
+
+<!-- Pestaña Gestión -->
+<section class="tab-panel">
+    <div class="gestion-formulario">
+      <div class="campo-flex">
+        <label for="gestion-grado">Grado:</label>
+        <select id="gestion-grado" onchange="mostrarAlumnosGrado()">
+          <option value="">Seleccione grado</option>
+        </select>
+      </div>
+  
+      <div class="campo-flex">
+        <label><input type="checkbox" id="modo-masivo" onchange="toggleModoMasivo()"> Modo masivo</label>
+      </div>
+  
+      <div id="agregar-individual" class="modo-box active">
+        <div class="campo-flex">
+          <label for="nuevo-alumno">Nombre del alumno:</label>
+          <input type="text" id="nuevo-alumno">
+          <button onclick="agregarAlumno()">Agregar</button>
+        </div>
+      </div>
+  
+      <div id="carga-masiva" class="modo-box">
+        <div class="campo-flex">
+          <label for="csv-file">Desde archivo CSV:</label>
+          <input type="file" id="csv-file" accept=".csv,.xlsx,.xls">
+          <button onclick="cargarDesdeCSV()">Importar</button>
+        </div>
+        <div class="campo-flex">
+          <label for="lista-alumnos-masiva">Lista manual:</label>
+          <textarea id="lista-alumnos-masiva" rows="3" placeholder="Un alumno por línea..."></textarea>
+          <button onclick="agregarAlumnosMasivos()">Agregar Alumnos</button>
+        </div>
+      </div>
+    </div>
+  <h2>Lista de Alumnos</h2>
+    <div class="alumno-list" id="lista-alumnos"></div>
+
+
+    <!-- Gestión de Padres Autorizados -->
+<section class="gestion-padres">
+  <h2>Gestión de Padres Autorizados</h2>
+
+  <div class="form-grid">
+    <label>DNI del Padre:</label>
+    <input type="text" id="dni-padre" placeholder="Ej: 12345678">
+
+    <label>Nombre del Padre:</label>
+    <input type="text" id="nombre-padre-gestion" placeholder="Ej: María López">
+
+    <div id="hijos-container">
+      <!-- Aquí se agregan selects de alumnos -->
+    </div>
+
+    <button onclick="agregarHijoAlFormulario()">➕ Agregar Hijo</button>
+
+    <button onclick="guardarPadreEnFirestore()">💾 Guardar Padre</button>
+  </div>
+
+  <hr>
+
+  <h3>Importar Padres Masivamente</h3>
+
+  <div class="form-grid">
+    <label>Subir Archivo CSV:</label>
+    <input type="file" id="csv-padres" accept=".csv">
+    <button onclick="importarPadresDesdeCSV()">📄 Importar CSV</button>
+
+    <label>O pegar lista manual:</label>
+    <textarea id="lista-padres-textarea" rows="5" placeholder="Ej: 12345678, María López, Ana García, 1A"></textarea>
+    <button onclick="importarPadresDesdeTexto()">📋 Importar Lista Manual</button>
+  </div>
+
+  <hr>
+  <div class="buscador-container">
+    <input type="text" id="buscador-padres" placeholder="Buscar por nombre o DNI..." oninput="filtrarPadres()" class="input-buscador">
+    <button onclick="resetearFiltroPadres()" class="boton-reset">🔄 Resetear</button>
+  </div>
+  
+  <h3>Listado de Padres Registrados</h3>
+  <div id="lista-padres"></div>
+</section>
+
+  </section>
+  
+
+      <!-- Pestaña Aula -->
+      <section class="tab-panel">
+        <label>Aula:</label>
+        <select id="aula-grado" onchange="cargarNotificacionesAula()">
+          <option value="">Seleccione</option>
+          <!-- mismo selector -->
+        </select>
+
+        <h2>Notificaciones</h2>
+        <div id="aula-notificaciones" class="notification-list"></div>
+      </section>
+
+      <!-- Pestaña Historial -->
+      <section class="tab-panel">
+        <div class="history-filters">
+          <label>Grado:</label>
+          <select id="historial-grado" onchange="filtrarHistorial()">
+            <option value="">Todos</option>
+            <!-- mismo selector -->
+          </select>
+
+          <label>Fecha:</label>
+          <input type="date" id="historial-fecha" onchange="filtrarHistorial()">
+
+          <label>Alumno:</label>
+          <input type="text" id="historial-alumno" placeholder="Buscar..." oninput="filtrarHistorial()">
+        </div>
+
+        <div id="historial-lista"></div>
+      </section>
+    </main>
+
+    <!-- Notificación Pantalla Completa -->
+
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="./script.js"></script>
+</body>
+</html>
