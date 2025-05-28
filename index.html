@@ -100,90 +100,92 @@
         </div>
       </section>
 
-<!-- Pestaña Gestión -->
-<section class="tab-panel">
-    <div class="gestion-formulario">
-      <div class="campo-flex">
-        <label for="gestion-grado">Grado:</label>
-        <select id="gestion-grado" onchange="mostrarAlumnosGrado()">
-          <option value="">Seleccione grado</option>
-        </select>
-      </div>
-  
-      <div class="campo-flex">
-        <label><input type="checkbox" id="modo-masivo" onchange="toggleModoMasivo()"> Modo masivo</label>
-      </div>
-  
-      <div id="agregar-individual" class="modo-box active">
-        <div class="campo-flex">
-          <label for="nuevo-alumno">Nombre del alumno:</label>
-          <input type="text" id="nuevo-alumno">
-          <button onclick="agregarAlumno()">Agregar</button>
+      <section class="tab-panel gestion-panel">
+        <nav class="gestion-subnav">
+          <button class="gestion-tab active" data-target="#gestionar-alumnos">Alumnos</button>
+          <button class="gestion-tab" data-target="#gestionar-padres">Padres</button>
+        </nav>
+      
+        <!-- Pestaña: Gestionar Alumnos -->
+        <div id="gestionar-alumnos" class="gestion-content active">
+          <h2>Gestión de Alumnos</h2>
+          <div class="gestion-formulario-grid">
+            <fieldset>
+              <legend>Agregar Alumno</legend>
+              <div class="campo-flex">
+                <label for="gestion-grado">Grado:</label>
+                <select id="gestion-grado" onchange="mostrarAlumnosGrado()">
+                  <option value="">Seleccione grado</option>
+                </select>
+              </div>
+              <div class="campo-flex">
+                <label for="nuevo-alumno">Nombre del alumno:</label>
+                <input type="text" id="nuevo-alumno" placeholder="Ej: Juan Pérez">
+                <button class="btn-accion" onclick="agregarAlumno()">Agregar</button>
+              </div>
+            </fieldset>
+      
+            <fieldset class="modo-masivo-box">
+              <legend>Carga Masiva</legend>
+              <div class="campo-flex">
+                <label for="csv-file">Desde archivo CSV/Excel:</label>
+                <input type="file" id="csv-file" accept=".csv,.xlsx,.xls">
+                <button class="btn-accion" onclick="cargarDesdeCSV()">Importar</button>
+              </div>
+              <div class="campo-flex">
+                <label for="lista-alumnos-masiva">Lista manual:</label>
+                <textarea id="lista-alumnos-masiva" rows="4" placeholder="Un alumno por línea..."></textarea>
+                <button class="btn-accion" onclick="agregarAlumnosMasivos()">Agregar Masivo</button>
+              </div>
+            </fieldset>
+          </div>
+      
+          <h3>Lista de Alumnos</h3>
+          <div class="alumno-list" id="lista-alumnos"></div>
         </div>
-      </div>
-  
-      <div id="carga-masiva" class="modo-box">
-        <div class="campo-flex">
-          <label for="csv-file">Desde archivo CSV:</label>
-          <input type="file" id="csv-file" accept=".csv,.xlsx,.xls">
-          <button onclick="cargarDesdeCSV()">Importar</button>
+      
+        <!-- Pestaña: Gestionar Padres -->
+        <div id="gestionar-padres" class="gestion-content">
+          <h2>Gestión de Padres Autorizados</h2>
+          <div class="gestion-formulario-grid padre-form">
+            <fieldset>
+              <legend>Agregar / Editar Padre</legend>
+              <div class="campo-flex">
+                <label for="dni-padre">DNI del Padre:</label>
+                <input type="text" id="dni-padre" placeholder="Ej: 12345678">
+              </div>
+              <div class="campo-flex">
+                <label for="nombre-padre-gestion">Nombre:</label>
+                <input type="text" id="nombre-padre-gestion" placeholder="Ej: María López">
+              </div>
+              <div id="hijos-container" class="hijos-grid"></div>
+              <button class="btn-accion" onclick="agregarHijoAlFormulario()">➕ Agregar Hijo</button>
+              <button class="btn-accion primary" onclick="guardarPadreEnFirestore()">💾 Guardar Padre</button>
+            </fieldset>
+      
+            <fieldset>
+              <legend>Importación Masiva</legend>
+              <div class="campo-flex">
+                <label for="csv-padres">Archivo CSV:</label>
+                <input type="file" id="csv-padres" accept=".csv">
+                <button class="btn-accion" onclick="importarPadresDesdeCSV()">Importar</button>
+              </div>
+              <div class="campo-flex">
+                <label for="lista-padres-textarea">Lista manual:</label>
+                <textarea id="lista-padres-textarea" rows="4" placeholder="12345678, María López, 1A"></textarea>
+                <button class="btn-accion" onclick="importarPadresDesdeTexto()">Importar Manual</button>
+              </div>
+            </fieldset>
+          </div>
+      
+          <h3>Lista de Padres Registrados</h3>
+          <div class="buscador-container padres-busqueda">
+            <input type="text" id="buscador-padres" placeholder="Buscar por nombre o DNI..." oninput="filtrarPadres()">
+            <button class="btn-accion" onclick="resetearFiltroPadres()">🔄 Resetear</button>
+          </div>
+          <div id="lista-padres" class="padres-list"></div>
         </div>
-        <div class="campo-flex">
-          <label for="lista-alumnos-masiva">Lista manual:</label>
-          <textarea id="lista-alumnos-masiva" rows="3" placeholder="Un alumno por línea..."></textarea>
-          <button onclick="agregarAlumnosMasivos()">Agregar Alumnos</button>
-        </div>
-      </div>
-    </div>
-  <h2>Lista de Alumnos</h2>
-    <div class="alumno-list" id="lista-alumnos"></div>
-
-
-    <!-- Gestión de Padres Autorizados -->
-<section class="gestion-padres">
-  <h2>Gestión de Padres Autorizados</h2>
-
-  <div class="form-grid">
-    <label>DNI del Padre:</label>
-    <input type="text" id="dni-padre" placeholder="Ej: 12345678">
-
-    <label>Nombre del Padre:</label>
-    <input type="text" id="nombre-padre-gestion" placeholder="Ej: María López">
-
-    <div id="hijos-container">
-      <!-- Aquí se agregan selects de alumnos -->
-    </div>
-
-    <button onclick="agregarHijoAlFormulario()">➕ Agregar Hijo</button>
-
-    <button onclick="guardarPadreEnFirestore()">💾 Guardar Padre</button>
-  </div>
-
-  <hr>
-
-  <h3>Importar Padres Masivamente</h3>
-
-  <div class="form-grid">
-    <label>Subir Archivo CSV:</label>
-    <input type="file" id="csv-padres" accept=".csv">
-    <button onclick="importarPadresDesdeCSV()">📄 Importar CSV</button>
-
-    <label>O pegar lista manual:</label>
-    <textarea id="lista-padres-textarea" rows="5" placeholder="Ej: 12345678, María López, Ana García, 1A"></textarea>
-    <button onclick="importarPadresDesdeTexto()">📋 Importar Lista Manual</button>
-  </div>
-
-  <hr>
-  <div class="buscador-container">
-    <input type="text" id="buscador-padres" placeholder="Buscar por nombre o DNI..." oninput="filtrarPadres()" class="input-buscador">
-    <button onclick="resetearFiltroPadres()" class="boton-reset">🔄 Resetear</button>
-  </div>
-  
-  <h3>Listado de Padres Registrados</h3>
-  <div id="lista-padres"></div>
-</section>
-
-  </section>
+      </section>
   
 
       <!-- Pestaña Aula -->

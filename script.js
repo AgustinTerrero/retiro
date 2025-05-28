@@ -29,16 +29,21 @@ const firebaseConfig = {
   
 
   function mostrarNotificacionFlotante(mensaje, tipo = 'success', grado = '') {
+    // Opcional: si ya hay un modal grande abierto, no mostramos el toast
     if (notificacionGrandeMostrada) return;
     if (grado && grado !== gradoSeleccionadoEnAula()) return;
   
-    const notificacion = document.createElement('div');
-    notificacion.className = `notification-floating ${tipo} centered-notification`;
-    notificacion.textContent = mensaje;
-  
-    document.body.appendChild(notificacion);
-    setTimeout(() => notificacion.remove(), 3500);
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: tipo,            // 'success', 'error', 'info', etc.
+      title: mensaje,
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true
+    });
   }
+  
   
   // Función para cargar datos iniciales
   async function cargarDatosIniciales() {
@@ -546,7 +551,7 @@ if (rolUsuario === 'aula') {
     const sinMochila = conMochilaValue === 'false';
   
     if (!nombrePadre) {
-        mostrarNotificacionFlotante('Ingrese su nombre como apoderado', 'error');
+        mostrarNotificacionFlotante('Ingrese su DNI', 'error');
         return;
     }
     if (!grado) {
@@ -598,39 +603,49 @@ if (rolUsuario === 'aula') {
   
 
 
-  
   async function agregarAlHistorial(notificacion) {
     try {
-      const entrada = {
-        id: notificacion.id,
-        grado: notificacion.grado,
-        alumno: notificacion.alumno,
-        conMochila: notificacion.conMochila,
-        fechaHora: firebase.firestore.Timestamp.fromDate(new Date(notificacion.fechaHora)),
-        nombrePadre: notificacion.nombrePadre
-    };
-      
-
-      await db.collection('historialRetiros').doc(entrada.id).set(entrada);
-      
-
-      historialRetiros.push({
-        ...entrada,
-        fechaHora: new Date(notificacion.fechaHora)
-      });
-      
-
-      historialRetiros.sort((a, b) => b.fechaHora - a.fechaHora);
-      
-      const tabHistorial = document.querySelectorAll('.tab')[3];
-      if (tabHistorial.classList.contains('active')) {
-        actualizarHistorial();
+      // 1. Obtener un objeto Date válido:
+      let fecha;
+      if (notificacion.fechaHora && typeof notificacion.fechaHora.toDate === 'function') {
+        // es un Firestore Timestamp
+        fecha = notificacion.fechaHora.toDate();
+      } else if (notificacion.fechaHora && notificacion.fechaHora.seconds) {
+        // a veces se guarda como { seconds, nanoseconds }
+        fecha = new Date(notificacion.fechaHora.seconds * 1000);
+      } else {
+        // si fuera string o número
+        fecha = new Date(notificacion.fechaHora);
       }
+  
+      if (isNaN(fecha.getTime())) {
+        console.warn('Fecha inválida en notificación, usando ahora() como fallback', notificacion);
+        fecha = new Date();
+      }
+  
+      // 2. Prepara la entrada para Firestore usando Timestamp.fromDate
+      const entrada = {
+        id:           notificacion.id,
+        grado:        notificacion.grado,
+        alumno:       notificacion.alumno,
+        conMochila:   notificacion.conMochila,
+        nombrePadre:  notificacion.nombrePadre,
+        fechaHora:    firebase.firestore.Timestamp.fromDate(fecha)
+      };
+  
+      // 3. Guarda en Firestore
+      await db.collection('historialRetiros').doc(entrada.id).set(entrada);
+  
+      // 4. Guarda en tu array local y reordena
+      historialRetiros.push({ ...entrada, fechaHora: fecha });
+      historialRetiros.sort((a, b) => b.fechaHora - a.fechaHora);
+  
     } catch (error) {
       console.error("Error al agregar al historial:", error);
       throw error;
     }
   }
+  
   
  
   function actualizarAlertaBadge() {
@@ -658,15 +673,18 @@ if (rolUsuario === 'aula') {
     contenedor.innerHTML = '';
   
     if (!gradoAula) {
-      contenedor.innerHTML = '<div class="empty-list">Seleccione un aula para ver las notificaciones de retiro.</div>';
+      contenedor.innerHTML =
+        '<div class="empty-list">Seleccione un aula para ver las notificaciones de retiro.</div>';
       return;
     }
   
+    // Sacamos la lista completa y filtramos pendientes
     const lista = notificacionesRetiro[gradoAula] || [];
     const pendientes = lista.filter(n => !n.atendido);
   
     if (pendientes.length === 0) {
-      contenedor.innerHTML = '<div class="empty-list">No hay notificaciones de retiro pendientes para esta aula.</div>';
+      contenedor.innerHTML =
+        '<div class="empty-list">No hay notificaciones de retiro pendientes para esta aula.</div>';
       return;
     }
   
@@ -674,10 +692,10 @@ if (rolUsuario === 'aula') {
       const item = document.createElement('div');
       item.className = 'notification-item fade-in';
   
+      // Fecha
       const fechaObj = notif.fechaHora?.seconds
         ? new Date(notif.fechaHora.seconds * 1000)
         : new Date(notif.fechaHora);
-  
       const fechaTexto = `${fechaObj.toLocaleDateString()} a las ${fechaObj.toLocaleTimeString()}`;
   
       item.innerHTML = `
@@ -686,9 +704,11 @@ if (rolUsuario === 'aula') {
         <div class="notification-time">Notificado: ${fechaTexto}</div>
       `;
   
+      // Aquí nos aseguramos de pasarle siempre el grado de la notificación,
+      // no el que esté seleccionado en el momento
       const btn = document.createElement('button');
       btn.textContent = 'Marcar como atendido';
-      btn.onclick = () => marcarComoAtendido(notif.id, gradoAula);
+      btn.addEventListener('click', () => marcarComoAtendido(notif.id, notif.grado));
   
       item.appendChild(btn);
       contenedor.appendChild(item);
@@ -697,51 +717,84 @@ if (rolUsuario === 'aula') {
     });
   }
   
-
+  
   async function marcarComoAtendido(idNotificacion, grado) {
     try {
-      const notificaciones = notificacionesRetiro[grado] || [];
-      const index = notificaciones.findIndex(n => n.id === idNotificacion);
-      
-      if (index !== -1) {
-        notificaciones[index].atendido = true;
+      // 1) Extraemos la lista de ese grado
+      const lista = notificacionesRetiro[grado] || [];
+      const idx   = lista.findIndex(n => n.id === idNotificacion);
+      if (idx === -1) return;
   
-        await db.collection('notificacionesRetiro').doc('datos').set(notificacionesRetiro);
+      // 2) Quitamos la notificación de pendientes (splice)
+      const [notif] = lista.splice(idx, 1);
   
-        cargarNotificacionesAula();
-        actualizarAlertaBadge();
-        mostrarNotificacionFlotante('Notificación marcada como atendida.');
+      // 3) Persistimos el cambio en Firestore
+      await db.collection('notificacionesRetiro').doc('datos').set(notificacionesRetiro);
   
-        
-        const indexHistorial = 3;
-        const tabHistorial = document.querySelectorAll('.tab-panel')[indexHistorial];
-        if (tabHistorial && tabHistorial.classList.contains('active')) {
-          filtrarHistorial(); 
-        }
-      }
+      // 4) La movemos al historial
+      await agregarAlHistorial(notif);
+  
+      // 5) Refrescamos UI
+      cargarNotificacionesAula();
+      actualizarAlertaBadge();
+  
+      // 6) Toast instantáneo
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Notificación atendida y movida al historial',
+        showConfirmButton: false,
+        timer: 1500,
+        timerProgressBar: true
+      });
     } catch (error) {
       console.error("Error al marcar como atendido:", error);
-      mostrarNotificacionFlotante("Error al actualizar el estado. Por favor, inténtelo de nuevo.");
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'error',
+        title: 'No se pudo actualizar. Intente de nuevo.',
+        showConfirmButton: false,
+        timer: 1500,
+        timerProgressBar: true
+      });
     }
   }
   
   
   
+  
   function actualizarHistorial(filtrados = null) {
     const contenedorHistorial = document.getElementById('historial-lista');
-    const listaHistorial = filtrados || historialRetiros;
   
+    // 1) Clonamos el array (o el filtrado) para no mutar el original
+    let lista = filtrados
+      ? [...filtrados]
+      : [...historialRetiros];
+  
+    // 2) Orden por orden de atendida: invertimos
+    lista = lista.reverse();
+  
+    // 3) Limpiamos el contenedor
     contenedorHistorial.innerHTML = '';
   
-    if (listaHistorial.length === 0) {
-      contenedorHistorial.innerHTML = '<div class="empty-list">No hay registros de retiro en el historial.</div>';
+    // 4) Si no hay nada, muestro mensaje
+    if (lista.length === 0) {
+      contenedorHistorial.innerHTML =
+        '<div class="empty-list">No hay registros de retiro en el historial.</div>';
       return;
     }
   
-    listaHistorial.forEach(entrada => {
-      const fecha = entrada.fechaHora.toLocaleDateString('es-AR', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+    // 5) Renderizo cada entrada en el orden de la lista invertida
+    lista.forEach(entrada => {
+      // Formateo fecha original de retiro (puede servirte para saber cuándo pidieron el retiro)
+      const fechaHora = entrada.fechaHora.toLocaleString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
   
       const card = document.createElement('div');
@@ -749,7 +802,7 @@ if (rolUsuario === 'aula') {
   
       card.innerHTML = `
         <div class="history-header">
-          <span class="history-fecha">${fecha}</span>
+          <span class="history-fecha">${fechaHora}</span>
           <span class="history-grado">Grado: ${entrada.grado}</span>
         </div>
         <div class="history-body">
@@ -762,6 +815,8 @@ if (rolUsuario === 'aula') {
       contenedorHistorial.appendChild(card);
     });
   }
+  
+  
   
   
   
@@ -973,15 +1028,24 @@ function hideNotification() {
 
 
 function iniciarEscuchaEnTiempoReal() {
+  let primeraVez = true;
+
   db.collection('notificaciones')
     .orderBy('fechaHora', 'desc')
     .onSnapshot(snapshot => {
+      // La primera llamada trae **todo** lo que ya hay — la omitimos
+      if (primeraVez) {
+        primeraVez = false;
+        return;
+      }
+
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') {
           const notificacion = change.doc.data();
-          const gradoActual = gradoSeleccionadoEnAula(); 
+          const gradoActual = gradoSeleccionadoEnAula();
 
           if (notificacion.grado === gradoActual) {
+            // mostrás toast / modal...
             mostrarNotificacionFlotante(
               `Nueva solicitud de retiro de ${notificacion.alumno}`,
               'success'
@@ -989,18 +1053,19 @@ function iniciarEscuchaEnTiempoReal() {
             mostrarNotificacionRetiro(notificacion);
             actualizarAlertaBadge();
 
+            // sólo pusheamos si no existe ya ese ID
             if (!notificacionesRetiro[gradoActual]) {
               notificacionesRetiro[gradoActual] = [];
             }
-            notificacionesRetiro[gradoActual].push({
-              id: change.doc.id,
-              ...notificacion
-            });
+            if (!notificacionesRetiro[gradoActual].some(n => n.id === change.doc.id)) {
+              notificacionesRetiro[gradoActual].push({
+                id: change.doc.id,
+                ...notificacion
+              });
+            }
 
-            
+            // y refrescamos
             cargarNotificacionesAula();
-          } else if (gradoActual) {
-            console.log(`[IGNORADO] Nueva solicitud de ${notificacion.alumno} para ${notificacion.grado}, no es tu aula (${gradoActual}).`);
           }
         }
       });
@@ -1877,3 +1942,12 @@ function seleccionarMochila(conMochila) {
     btnSin.classList.add('seleccionado');
   }
 }
+// Intercambio de subpestañas en Gestión
+Array.from(document.querySelectorAll('.gestion-tab')).forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.gestion-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.gestion-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(btn.getAttribute('data-target')).classList.add('active');
+  });
+});
